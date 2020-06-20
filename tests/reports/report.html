@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 21-Jun-2020 at 01:30:32 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>JAVA_HOME</td>
+        <td>C:\Program Files\Java\jdk-12.0.2</td></tr>
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.8.1", "pytest": "5.4.2"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.18362-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.9.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.2</td></tr></table>
+    <h2>Summary</h2>
+    <p>16 tests ran in 265.87 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">14 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">2 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_create_account.py::TestCreateAccount::test_validation_of_the_presence_all_the_fields_on_create_account_screen_address_section</td>
+          <td class="col-duration">15.44</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div><div><img src="test_create_account.py_TestCreateAccount_test_validation_of_the_presence_all_the_fields_on_create_account_screen_address_section.png" alt="screenshot" style="width:304px;height:228px;" onclick="window.open(this.src)" align="right"/></div></div>
+            <div class="log">self = &lt;tests.test_create_account.TestCreateAccount object at 0x0458E7F0&gt;<br/>element = &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;8dd7a6ba-66d5-461e-bc7a-a94a14d6ae93&quot;)&gt;<br/><br/>    def validate_element_to_be_displayed(self, element):<br/>        global log<br/>        log = self.getLogger()<br/>        try:<br/>&gt;           test_element = WebDriverWait(self.driver, 10, poll_frequency=1).until(EC.visibility_of(element))<br/><br/>..\utilities\WebValidation.py:21: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;selenium.webdriver.support.wait.WebDriverWait (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;)&gt;<br/>method = &lt;selenium.webdriver.support.expected_conditions.visibility_of object at 0x00D5B7C0&gt;, message = &#x27;&#x27;<br/><br/>    def until(self, method, message=&#x27;&#x27;):<br/>        &quot;&quot;&quot;Calls the method provided with the driver as an argument until the \<br/>        return value is not False.&quot;&quot;&quot;<br/>        screen = None<br/>        stacktrace = None<br/>    <br/>        end_time = time.time() + self._timeout<br/>        while True:<br/>            try:<br/>                value = method(self._driver)<br/>                if value:<br/>                    return value<br/>            except self._ignored_exceptions as exc:<br/>                screen = getattr(exc, &#x27;screen&#x27;, None)<br/>                stacktrace = getattr(exc, &#x27;stacktrace&#x27;, None)<br/>            time.sleep(self._poll)<br/>            if time.time() &gt; end_time:<br/>                break<br/>&gt;       raise TimeoutException(message, screen, stacktrace)<br/><span class="error">E       selenium.common.exceptions.TimeoutException: Message:</span><br/><br/>c:\users\kumar gaurav\appdata\local\programs\python\python38-32\lib\site-packages\selenium\webdriver\support\wait.py:80: TimeoutException<br/><br/>During handling of the above exception, another exception occurred:<br/><br/>self = &lt;tests.test_create_account.TestCreateAccount object at 0x0458E7F0&gt;<br/><br/>    def test_validation_of_the_presence_all_the_fields_on_create_account_screen_address_section(self):<br/>        self.test_navigation_to_create_account_screen()<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_page_subheading())<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_first_name_text_box())<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_last_name_text_box())<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_company_text_box())<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_text_box())<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_line2_text_box())<br/>        self.validate_element_to_be_displayed(create_account_page.get_address_city_text_box())<br/>&gt;       self.validate_element_to_be_displayed(create_account_page.get_address_state_drop_down())<br/><br/>test_create_account.py:96: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;tests.test_create_account.TestCreateAccount object at 0x0458E7F0&gt;<br/>element = &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;8dd7a6ba-66d5-461e-bc7a-a94a14d6ae93&quot;)&gt;<br/><br/>    def validate_element_to_be_displayed(self, element):<br/>        global log<br/>        log = self.getLogger()<br/>        try:<br/>            test_element = WebDriverWait(self.driver, 10, poll_frequency=1).until(EC.visibility_of(element))<br/>            test_element.is_displayed()<br/>            log.info(&quot;Element {0} is visible&quot;.format(test_element))<br/>        except:<br/>&gt;           raise Exception(&quot;Element {0} is not visible&quot;.format(element))<br/><span class="error">E           Exception: Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;8dd7a6ba-66d5-461e-bc7a-a94a14d6ae93&quot;)&gt; is not visible</span><br/><br/>..\utilities\WebValidation.py:25: Exception<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;afe70571-f28a-4e60-aeca-5fb99835fa0b&quot;)&gt; is visible
+[32mINFO    [0m test_navigation_to_create_account_screen:test_create_account.py:34 Navigated to Create Account Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;b8fbc40c-a862-4e82-b07f-294667ef1165&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;e41f3389-6b53-484c-be89-592495be979b&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;00a7e752-781d-44d4-8b37-f63db9240368&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;91aa3be9-0402-4aac-977b-358a14340e01&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;9d95e593-3c4a-4a01-ab27-041d470ca75f&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;4eed13c5-bf27-48e7-a6ec-67c5872f3634&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;86af625e-bc05-4ade-86d6-b91141452d25&quot;)&gt; is visible<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_login_with_test_data_management.py::TestLoginWithTestData::test_login_by_passing_correct_user_credentials[gaurav05153@gmail.com]</td>
+          <td class="col-duration">2.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div><div><img src="test_login_with_test_data_management.py_TestLoginWithTestData_test_login_by_passing_correct_user_credentials[gaurav05153@gmail.com].png" alt="screenshot" style="width:304px;height:228px;" onclick="window.open(this.src)" align="right"/></div></div>
+            <div class="log">self = &lt;tests.test_login_with_test_data_management.TestLoginWithTestData object at 0x00DB8CD0&gt;, get_correct_creds = &#x27;gaurav05153@gmail.com&#x27;<br/><br/>    def test_login_by_passing_correct_user_credentials(self, get_correct_creds):<br/>        loginpage = LoginPage(self.driver)<br/>        homepage = HomePage(self.driver)<br/>        log = self.getLogger()<br/>        self.test_login()<br/>&gt;       loginpage.get_email_address_textbox().send_keys(get_correct_creds[&quot;email_id&quot;])<br/><span class="error">E       TypeError: string indices must be integers</span><br/><br/>test_login_with_test_data_management.py:32: TypeError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_login:test_login_with_test_data_management.py:23 Clicked on the SIgn in link of Landing page
+[32mINFO    [0m test_login:test_login_with_test_data_management.py:25 Navigated to Login Page<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_create_account.py::TestCreateAccount::test_navigation_to_create_account_screen</td>
+          <td class="col-duration">5.46</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Automation Practice Website is Opened successfully
+<br/> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m &lt;module&gt;:conftest.py:48 Automation Practice Website is Opened successfully
+[32mINFO    [0m &lt;module&gt;:conftest.py:51 Browser is Maximized<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;82f9bcb3-e7f2-4673-93cf-2486e0fe89cb&quot;)&gt; is visible
+[32mINFO    [0m test_navigation_to_create_account_screen:test_create_account.py:34 Navigated to Create Account Page<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_create_account.py::TestCreateAccount::test_validation_of_the_presence_of_all_fields_label_on_create_account_screen</td>
+          <td class="col-duration">7.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;36f9e7bc-a30e-467d-8a26-11a1b4e52046&quot;)&gt; is visible
+[32mINFO    [0m test_navigation_to_create_account_screen:test_create_account.py:34 Navigated to Create Account Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;36f9e7bc-a30e-467d-8a26-11a1b4e52046&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;b7fa0232-7814-4ace-9f3b-c04ac111b119&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;279ebbd0-cbf6-4f62-82ac-2e0fb33967a1&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;e215cfeb-0908-4e57-a056-f127e2d7b73b&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;47228735-6a76-4a27-988f-b3496861761c&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;299fa92f-c93a-4462-9041-3890efb35e0a&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;c195eb25-063c-446c-99d0-c6c5e1982329&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;38ad939f-c996-49bd-b408-6f54daece15d&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;dbfb8de1-c6a8-41e8-b5e3-d3539452b400&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;613a8f3b-c2a2-469a-adcf-c43ee2018c76&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;0cc1c2b5-3f40-47a2-97dc-5c48e62d393e&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;d5afa477-010b-423d-a358-c00ee312f8f6&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;c74906f2-3c67-43e2-8dfc-5cb88d0d9fae&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;5223f5d7-0d8f-4ad0-941c-9ae8310c2c29&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;05bd180c-0791-4405-893b-8472a670f429&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;4612ca66-8b8d-4a7d-a226-f3537fa68e87&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;c320e708-a1ad-4333-a7ce-67d1cf80e5a6&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;2caba50c-02fd-40fd-8ae7-4743461475b6&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;c676f7f9-24a1-434e-bead-90c52031fb6d&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;1178146f-2d04-4974-80f8-f55c67ab9ace&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;a312305d-8b0f-4e89-aaae-6333f23ab1ac&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;24b11ee6-a0ea-440d-8a84-de686e5ae331&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;e0d74a0d-13ae-44b2-94cf-bc561bd50cf1&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;9bde1b47-693c-428b-bbca-7e407b2f6618&quot;)&gt; is visible<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_create_account.py::TestCreateAccount::test_validation_of_the_presence_all_the_fields_on_create_account_screen_basic_information_section</td>
+          <td class="col-duration">5.45</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;a20e0653-b71d-40bb-b6ec-53de38e460c0&quot;)&gt; is visible
+[32mINFO    [0m test_navigation_to_create_account_screen:test_create_account.py:34 Navigated to Create Account Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;a20e0653-b71d-40bb-b6ec-53de38e460c0&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;aa6401a1-6573-4630-a55f-3c867ef2135e&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;7316a1b4-ee56-42da-9249-521bbb9e6e4b&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;ea5f6d7e-20d4-4d64-a3cd-7f77f154bbf5&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;998f5ebd-bc20-4b7b-af62-4cf29bc51b4c&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;13c04a7e-b4ad-47e5-98c0-ebdfd2ca979b&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;b16e196e-0548-4898-adaf-930753220bca&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;6a1908af-6aec-4128-8df4-bcf54f031eff&quot;)&gt; is visible<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_create_account.py::TestCreateAccount::test_validation_of_filling_the_create_account_form_on_create_account_screen</td>
+          <td class="col-duration">11.46</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;fed68a8505453543f7e5e16a6d8a0f1c&quot;, element=&quot;7b5ef090-5fa3-4511-89c4-feb7247a0422&quot;)&gt; is visible
+[32mINFO    [0m test_navigation_to_create_account_screen:test_create_account.py:34 Navigated to Create Account Page<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_e2e.py::Test_e2e_shopping::test_e2e_tshirt_shopping</td>
+          <td class="col-duration">27.56</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Automation Practice Website is Opened successfully
+<br/> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m &lt;module&gt;:conftest.py:48 Automation Practice Website is Opened successfully
+[32mINFO    [0m &lt;module&gt;:conftest.py:51 Browser is Maximized<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:34 Email id gaurav05153@gmail.com is entered
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:36 Password admin is entered
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:38 Clicked on Sign in button of Login Page
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:40 Navigated to Home Page
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:48 T-shirt is found in dress collections
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:59 Dress is selected
+[32mINFO    [0m test_e2e_tshirt_shopping:test_e2e.py:44 Pay by Bank Wire is choosed by customer to payment
+[32mINFO    [0m test_e2e_tshirt_shopping:test_e2e.py:49 T-shirt is found, shopped and ordered successfully
+[32mINFO    [0m test_e2e_tshirt_shopping:test_e2e.py:51 Clicked on Sign out<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_e2e.py::Test_e2e_shopping::test_e2e_blouse_shopping</td>
+          <td class="col-duration">24.93</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:34 Email id gaurav05153@gmail.com is entered
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:36 Password admin is entered
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:38 Clicked on Sign in button of Login Page
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:40 Navigated to Home Page
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:55 Blouse is found in dress collections
+[32mINFO    [0m login_by_passing_correct_user_credentials:CommonMethods.py:59 Dress is selected
+[32mINFO    [0m test_e2e_blouse_shopping:test_e2e.py:80 Pay by Bank Wire is choosed by customer to payment
+[32mINFO    [0m test_e2e_blouse_shopping:test_e2e.py:85 T-shirt is found, shopped and ordered successfully
+[32mINFO    [0m test_e2e_blouse_shopping:test_e2e.py:87 Clicked on Sign out<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_forgot_password.py::TestForgotPassword::test_navigation_to_forgot_password_screen</td>
+          <td class="col-duration">4.65</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Automation Practice Website is Opened successfully
+<br/> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m &lt;module&gt;:conftest.py:48 Automation Practice Website is Opened successfully
+[32mINFO    [0m &lt;module&gt;:conftest.py:51 Browser is Maximized<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:19 Clicked on the Sign in link of Landing page
+[32mINFO    [0m navigation_from_landing_page_to_login_page:CommonMethods.py:21 Navigated to Login Page
+[32mINFO    [0m test_navigation_to_forgot_password_screen:test_forgot_password.py:20 Navigated to Forgot Password Page<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_forgot_password.py::TestForgotPassword::test_validate_presence_of_expected_fields_in_forgot_password_screen</td>
+          <td class="col-duration">0.53</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;f562ca6bb99b566a8af25ba6b46ec50a&quot;, element=&quot;b40d7b5c-461c-4250-b24b-733c60fdf964&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;f562ca6bb99b566a8af25ba6b46ec50a&quot;, element=&quot;7f61d447-ce9e-423c-a312-0468dc6283fb&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;f562ca6bb99b566a8af25ba6b46ec50a&quot;, element=&quot;91858825-e9f3-43e9-b244-f891cc49502c&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:23 Element &lt;selenium.webdriver.remote.webelement.WebElement (session=&quot;f562ca6bb99b566a8af25ba6b46ec50a&quot;, element=&quot;e066161b-0ef7-48de-a053-76bd94be509e&quot;)&gt; is visible
+[32mINFO    [0m validate_element_to_be_displayed:WebValidation.py:34 Expected Message FORGOT YOUR PASSWORD? is present<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_login.py::TestLogin::test_login_for_registered_user</td>
+          <td class="col-duration">2.51</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Automation Practice Website is Opened successfully
+<br/> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m &lt;module&gt;:conftest.py:48 Automation Practice Website is Opened successfully
+[32mINFO    [0m &lt;module&gt;:conftest.py:51 Browser is Maximized<br/> ------------------------------Captured stdout call------------------------------ <br/>Login - My Store
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_login.py::TestLogin::test_login_by_passing_correct_user_credentials</td>
+          <td class="col-duration">8.38</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>Login - My Store
+My account - My Store
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_login.py::TestLogin::test_login_unsuccessful_message_by_passing_correct_user_credentials</td>
+          <td class="col-duration">4.03</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>Login - My Store
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_login_with_test_data_management.py::TestLoginWithTestData::test_login</td>
+          <td class="col-duration">2.40</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -----------------------------Captured stdout setup------------------------------ <br/>Automation Practice Website is Opened successfully
+<br/> -------------------------------Captured log setup------------------------------- <br/>[32mINFO    [0m &lt;module&gt;:conftest.py:48 Automation Practice Website is Opened successfully
+[32mINFO    [0m &lt;module&gt;:conftest.py:51 Browser is Maximized<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_login:test_login_with_test_data_management.py:23 Clicked on the SIgn in link of Landing page
+[32mINFO    [0m test_login:test_login_with_test_data_management.py:25 Navigated to Login Page<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_login_with_test_data_management.py::TestLoginWithTestData::test_login_unsuccessful_message_by_passing_incorrect_user_credentials[get_wrong_creds0]</td>
+          <td class="col-duration">4.47</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_login:test_login_with_test_data_management.py:23 Clicked on the SIgn in link of Landing page
+[32mINFO    [0m test_login:test_login_with_test_data_management.py:25 Navigated to Login Page
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:48 Email id gaurav0505153@gmail.com is entered
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:50 Password admin is entered
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:52 Clicked on Sign in button of Login Page
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:56 Validated the error message due to wrong credentials entered<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_login_with_test_data_management.py::TestLoginWithTestData::test_login_unsuccessful_message_by_passing_incorrect_user_credentials[get_wrong_creds1]</td>
+          <td class="col-duration">4.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_login:test_login_with_test_data_management.py:23 Clicked on the SIgn in link of Landing page
+[32mINFO    [0m test_login:test_login_with_test_data_management.py:25 Navigated to Login Page
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:48 Email id gaurav05153@gmail.com is entered
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:50 Password admin123 is entered
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:52 Clicked on Sign in button of Login Page
+[32mINFO    [0m test_login_unsuccessful_message_by_passing_incorrect_user_credentials:test_login_with_test_data_management.py:56 Validated the error message due to wrong credentials entered<br/></div></td></tr></tbody></table></body></html>
