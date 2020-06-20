@@ -143,5 +143,4 @@ class TestCreateAccount(WebValidation):
                                     create_account_page_data.test_create_account_page_correct_data.get("zip_code"))
         self.select_drop_down_value_by_text(create_account_page.get_address_country_drop_down(),
                                     create_account_page_data.test_create_account_page_correct_data.get("country"))
-        #self.click(self.driver.find_element_by_id("test"))
 
